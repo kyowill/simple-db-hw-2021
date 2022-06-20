@@ -1,8 +1,7 @@
 package simpledb.storage;
 
 import java.io.Serializable;
-import java.util.Arrays;
-import java.util.Iterator;
+import java.util.*;
 
 /**
  * Tuple maintains information about the contents of a tuple. Tuples have a
@@ -13,6 +12,12 @@ public class Tuple implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    private TupleDesc desc;
+
+    private RecordId id;
+
+    List<Field> fields;
+
     /**
      * Create a new tuple with the specified schema (type).
      *
@@ -22,6 +27,8 @@ public class Tuple implements Serializable {
      */
     public Tuple(TupleDesc td) {
         // some code goes here
+        this.desc = td;
+        fields = new ArrayList<>(Collections.nCopies(td.numFields(), null));
     }
 
     /**
@@ -29,7 +36,7 @@ public class Tuple implements Serializable {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        return desc;
     }
 
     /**
@@ -38,7 +45,7 @@ public class Tuple implements Serializable {
      */
     public RecordId getRecordId() {
         // some code goes here
-        return null;
+        return id;
     }
 
     /**
@@ -49,6 +56,7 @@ public class Tuple implements Serializable {
      */
     public void setRecordId(RecordId rid) {
         // some code goes here
+        this.id = rid;
     }
 
     /**
@@ -61,6 +69,7 @@ public class Tuple implements Serializable {
      */
     public void setField(int i, Field f) {
         // some code goes here
+        fields.set(i, f);
     }
 
     /**
@@ -71,7 +80,7 @@ public class Tuple implements Serializable {
      */
     public Field getField(int i) {
         // some code goes here
-        return null;
+        return fields.get(i);
     }
 
     /**
@@ -84,24 +93,28 @@ public class Tuple implements Serializable {
      */
     public String toString() {
         // some code goes here
-        throw new UnsupportedOperationException("Implement this");
+        // throw new UnsupportedOperationException("Implement this");
+        String res = "";
+        for (Field field : fields) {
+            res += field.toString();
+        }
+        return res;
     }
 
     /**
      * @return
      *        An iterator which iterates over all the fields of this tuple
      * */
-    public Iterator<Field> fields()
-    {
+    public Iterator<Field> fields() {
         // some code goes here
-        return null;
+        return fields.iterator();
     }
 
     /**
      * reset the TupleDesc of this tuple (only affecting the TupleDesc)
      * */
-    public void resetTupleDesc(TupleDesc td)
-    {
+    public void resetTupleDesc(TupleDesc td) {
         // some code goes here
+        this.desc = td;
     }
 }
