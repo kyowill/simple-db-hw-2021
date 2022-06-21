@@ -29,6 +29,42 @@ public class Catalog {
      */
     public Catalog() {
         // some code goes here
+        idMap = new HashMap<>();
+        nameMap = new HashMap<>();
+    }
+
+    Map<Integer, Table> idMap;
+
+    Map<String, Table> nameMap;
+
+    class Table {
+        private DbFile file;
+        private String name;
+        private String pkeyField;
+
+        public void setFile(DbFile file) {
+            this.file = file;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public void setPkeyField(String pkeyField) {
+            this.pkeyField = pkeyField;
+        }
+
+        public DbFile getFile() {
+            return file;
+        }
+
+        public String getPkeyField() {
+            return pkeyField;
+        }
+
+        public String getName() {
+            return name;
+        }
     }
 
     /**
@@ -42,6 +78,12 @@ public class Catalog {
      */
     public void addTable(DbFile file, String name, String pkeyField) {
         // some code goes here
+        Table table = new Table();
+        table.setFile(file);
+        table.setPkeyField(pkeyField);
+        table.setName(name);
+        idMap.put(file.getId(), table);
+        nameMap.put(name, table);
     }
 
     public void addTable(DbFile file, String name) {
@@ -65,7 +107,8 @@ public class Catalog {
      */
     public int getTableId(String name) throws NoSuchElementException {
         // some code goes here
-        return 0;
+        checkTableExist(name);
+        return nameMap.get(name).getFile().getId();
     }
 
     /**
@@ -76,7 +119,8 @@ public class Catalog {
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
         // some code goes here
-        return null;
+        checkTableExist(tableid);
+        return idMap.get(tableid).getFile().getTupleDesc();
     }
 
     /**
@@ -87,27 +131,32 @@ public class Catalog {
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
         // some code goes here
-        return null;
+        checkTableExist(tableid);
+        return idMap.get(tableid).getFile();
     }
 
     public String getPrimaryKey(int tableid) {
         // some code goes here
-        return null;
+        checkTableExist(tableid);
+        return idMap.get(tableid).getPkeyField();
     }
 
     public Iterator<Integer> tableIdIterator() {
         // some code goes here
-        return null;
+        return idMap.keySet().iterator();
     }
 
     public String getTableName(int id) {
         // some code goes here
-        return null;
+        checkTableExist(id);
+        return idMap.get(id).getName();
     }
     
     /** Delete all tables from the catalog */
     public void clear() {
         // some code goes here
+        idMap.clear();
+        nameMap.clear();
     }
     
     /**
@@ -162,6 +211,18 @@ public class Catalog {
         } catch (IndexOutOfBoundsException e) {
             System.out.println ("Invalid catalog entry : " + line);
             System.exit(0);
+        }
+    }
+
+    private void checkTableExist(int tableid) {
+        if (!idMap.containsKey(tableid)) {
+            throw new NoSuchElementException(tableid + " table doesn't exist");
+        }
+    }
+
+    private void checkTableExist(String name) {
+        if (!nameMap.containsKey(name)) {
+            throw new NoSuchElementException(name + " table doesn't exist");
         }
     }
 }
