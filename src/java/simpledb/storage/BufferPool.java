@@ -1,14 +1,13 @@
 package simpledb.storage;
 
-import simpledb.common.Database;
-import simpledb.common.Permissions;
-import simpledb.common.DbException;
-import simpledb.common.DeadlockException;
+import simpledb.common.*;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -33,6 +32,10 @@ public class BufferPool {
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
+    private int capacity;
+
+    ConcurrentHashMap<PageId, Page> bufferPool;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -40,6 +43,8 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
+        capacity = numPages;
+        bufferPool = new ConcurrentHashMap<>();
     }
     
     public static int getPageSize() {
@@ -74,7 +79,24 @@ public class BufferPool {
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-        return null;
+        // todo 没有实现perm相关功能
+        Page result = null;
+        synchronized (tid) {
+            result = bufferPool.get(pid);
+            if (result == null) {
+                int tableId = pid.getTableId();
+                DbFile file = Database.getCatalog().getDatabaseFile(tableId);
+                Page page = file.readPage(pid);
+                synchronized (this) {
+                    if (bufferPool.size() == capacity) {
+                        throw new DbException("BufferPool is full");
+                    } else {
+                        bufferPool.put(pid, page);
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     /**
