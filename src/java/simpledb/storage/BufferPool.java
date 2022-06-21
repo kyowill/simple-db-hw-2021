@@ -84,10 +84,10 @@ public class BufferPool {
         synchronized (tid) {
             result = bufferPool.get(pid);
             if (result == null) {
-                int tableId = pid.getTableId();
-                DbFile file = Database.getCatalog().getDatabaseFile(tableId);
-                Page page = file.readPage(pid);
                 synchronized (this) {
+                    int tableId = pid.getTableId();
+                    DbFile file = Database.getCatalog().getDatabaseFile(tableId);
+                    Page page = file.readPage(pid);
                     if (bufferPool.size() == capacity) {
                         throw new DbException("BufferPool is full");
                     } else {
