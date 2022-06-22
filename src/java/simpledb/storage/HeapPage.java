@@ -8,6 +8,7 @@ import simpledb.transaction.TransactionId;
 
 import java.util.*;
 import java.io.*;
+import java.util.function.Consumer;
 
 /**
  * Each instance of HeapPage stores data for one page of HeapFiles and 
@@ -73,7 +74,8 @@ public class HeapPage implements Page {
     */
     private int getNumTuples() {        
         // some code goes here
-        return 0;
+        int tuplePerSize = td.getSize() * 8 + 1;
+        return BufferPool.getPageSize() * 8 / tuplePerSize;
 
     }
 
@@ -81,10 +83,12 @@ public class HeapPage implements Page {
      * Computes the number of bytes in the header of a page in a HeapFile with each tuple occupying tupleSize bytes
      * @return the number of bytes in the header of a page in a HeapFile with each tuple occupying tupleSize bytes
      */
-    private int getHeaderSize() {        
-        
+    private int getHeaderSize() {
         // some code goes here
-        return 0;
+        if (numSlots % 8 == 0) {
+            return numSlots / 8;
+        }
+        return numSlots / 8 + 1;
                  
     }
     
@@ -117,8 +121,9 @@ public class HeapPage implements Page {
      * @return the PageId associated with this page.
      */
     public HeapPageId getId() {
-    // some code goes here
-    throw new UnsupportedOperationException("implement this");
+        // some code goes here
+        // throw new UnsupportedOperationException("implement this");
+        return pid;
     }
 
     /**
@@ -288,7 +293,21 @@ public class HeapPage implements Page {
      */
     public int getNumEmptySlots() {
         // some code goes here
-        return 0;
+        int empty = 0;
+        for (int i = 0; i < header.length; i++) {
+            byte oneByte = header[i];
+            for (int j = 0; j < 8; j++) {
+                int idx = i * 8 + j;
+                if (idx < numSlots) {
+                    byte headerByte = 0;
+                    headerByte |= 1 << j;
+                    if ((headerByte & oneByte) == 0) {
+                        empty++;
+                    }
+                }
+            }
+        }
+        return empty;
     }
 
     /**
@@ -296,6 +315,14 @@ public class HeapPage implements Page {
      */
     public boolean isSlotUsed(int i) {
         // some code goes here
+        int idx = i / 8; // 找到第几个字节
+        int j = i % 8; // 某个字节第几位
+        byte headerByte = 0;
+        headerByte |= (1 << j);
+        // 可能是负数
+        if ((header[idx] & headerByte) != 0) {
+            return true;
+        }
         return false;
     }
 
@@ -313,8 +340,43 @@ public class HeapPage implements Page {
      */
     public Iterator<Tuple> iterator() {
         // some code goes here
-        return null;
+        // 连续非空的slot数量
+        int size = numSlots - getNumEmptySlots();
+        return new Itr(size);
     }
 
+    private class Itr implements Iterator<Tuple> {
+        int cursor;       // index of next element to return
+
+        int size;
+
+        // prevent creating a synthetic constructor
+        Itr(int size) {
+            this.size = size;
+        }
+
+        public boolean hasNext() {
+            return cursor != size;
+        }
+
+        @SuppressWarnings("unchecked")
+        public Tuple next() {
+            int i = cursor;
+            if (i >= numSlots)
+                throw new NoSuchElementException();
+            cursor = i + 1;
+            return tuples[i];
+        }
+
+        public void remove() {
+            throw new UnsupportedOperationException("iterator not support remove");
+        }
+    }
+
+    // debug class
+
+    public int getNumSlots() {
+        return numSlots;
+    }
 }
 
