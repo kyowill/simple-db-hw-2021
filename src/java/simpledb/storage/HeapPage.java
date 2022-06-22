@@ -92,7 +92,6 @@ public class HeapPage implements Page {
             return numSlots / 8;
         }
         return numSlots / 8 + 1;
-
     }
 
     /**
