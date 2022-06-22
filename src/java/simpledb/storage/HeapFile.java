@@ -190,7 +190,7 @@ public class HeapFile implements DbFile {
                 throw new NoSuchElementException("not opened");
             }
             if (!hasNext()) {
-                throw new NoSuchElementException("not opened");
+                throw new NoSuchElementException("no more tuples");
             }
             return curItr.next();
         }
