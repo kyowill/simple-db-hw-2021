@@ -14,66 +14,81 @@ public class Join extends Operator {
 
     private static final long serialVersionUID = 1L;
 
+    private JoinPredicate joinPredicate;
+
+    private OpIterator child1;
+
+    private OpIterator child2;
+
+    private Tuple lastTp1;
+
     /**
      * Constructor. Accepts two children to join and the predicate to join them
      * on
-     * 
-     * @param p
-     *            The predicate to use to join the children
-     * @param child1
-     *            Iterator for the left(outer) relation to join
-     * @param child2
-     *            Iterator for the right(inner) relation to join
+     *
+     * @param p      The predicate to use to join the children
+     * @param child1 Iterator for the left(outer) relation to join
+     * @param child2 Iterator for the right(inner) relation to join
      */
     public Join(JoinPredicate p, OpIterator child1, OpIterator child2) {
         // some code goes here
+        this.joinPredicate = p;
+        this.child1 = child1;
+        this.child2 = child2;
     }
 
     public JoinPredicate getJoinPredicate() {
         // some code goes here
-        return null;
+        return joinPredicate;
     }
 
     /**
-     * @return
-     *       the field name of join field1. Should be quantified by
-     *       alias or table name.
-     * */
+     * @return the field name of join field1. Should be quantified by
+     * alias or table name.
+     */
     public String getJoinField1Name() {
         // some code goes here
-        return null;
+        return child1.getTupleDesc().getFieldName(joinPredicate.getField1());
     }
 
     /**
-     * @return
-     *       the field name of join field2. Should be quantified by
-     *       alias or table name.
-     * */
+     * @return the field name of join field2. Should be quantified by
+     * alias or table name.
+     */
     public String getJoinField2Name() {
         // some code goes here
-        return null;
+        return child2.getTupleDesc().getFieldName(joinPredicate.getField2());
     }
 
     /**
      * @see TupleDesc#merge(TupleDesc, TupleDesc) for possible
-     *      implementation logic.
+     * implementation logic.
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        return TupleDesc.merge(child1.getTupleDesc(), child2.getTupleDesc());
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
+        child1.open();
+        child2.open();
+        super.open();
     }
 
     public void close() {
         // some code goes here
+        child1.close();
+        child2.close();
+        super.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
+        child1.rewind();
+        child2.rewind();
+        lastTp1 = null;
     }
 
     /**
@@ -90,24 +105,65 @@ public class Join extends Operator {
      * <p>
      * For example, if one tuple is {1,2,3} and the other tuple is {1,5,6},
      * joined on equality of the first column, then this returns {1,2,3,1,5,6}.
-     * 
+     *
      * @return The next matching tuple.
      * @see JoinPredicate#filter
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
+        if (lastTp1 == null && !child1.hasNext()) {
+            // end
+            return null;
+        } else if (lastTp1 == null && child1.hasNext()) {
+            // init
+            lastTp1 = child1.next();
+        }
+        while (true) {
+            while (child2.hasNext()) {
+                Tuple n2 = child2.next();
+                if (joinPredicate.filter(lastTp1, n2)) {
+                    // System.out.println(joinTwoTuple(lastTp1, n2));
+                    return joinTwoTuple(lastTp1, n2);
+                }
+            }
+            if (child1.hasNext()) {
+                lastTp1 = child1.next();
+                child2.rewind();
+            } else {
+                break;
+            }
+        }
         return null;
+    }
+
+    private Tuple joinTwoTuple(Tuple t1, Tuple t2) {
+        TupleDesc tDesc = TupleDesc.merge(t1.getTupleDesc(), t2.getTupleDesc());
+        Tuple nTp = new Tuple(tDesc);
+        int t1NumFields = t1.getTupleDesc().numFields();
+        int t2NumFields = t2.getTupleDesc().numFields();
+        for (int i = 0; i < t1NumFields; i++) {
+            nTp.setField(i, t1.getField(i));
+        }
+        for (int i = t1NumFields; i < (t1NumFields + t2NumFields); i++) {
+            nTp.setField(i, t2.getField(i - t1NumFields));
+        }
+        return nTp;
     }
 
     @Override
     public OpIterator[] getChildren() {
         // some code goes here
-        return null;
+        OpIterator[] result = new OpIterator[2];
+        result[0] = child1;
+        result[1] = child2;
+        return result;
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
+        child1 = children[0];
+        child2 = children[1];
     }
 
 }
