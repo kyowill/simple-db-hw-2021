@@ -205,7 +205,7 @@ public class HeapFile implements DbFile {
                 HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
                 curItr = page.iterator();
             }
-            return true;
+            return curItr.hasNext();
         }
 
         @Override
