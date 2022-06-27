@@ -24,6 +24,8 @@ public class HeapFile implements DbFile {
     private File file;
     private TupleDesc tupleDesc;
 
+    private volatile HeapPageId lastPageId;
+
     /**
      * Constructs a heap file backed by the specified file.
      *
@@ -76,26 +78,18 @@ public class HeapFile implements DbFile {
     public Page readPage(PageId pid) {
         // some code goes here
         HeapPage page = null;
-        RandomAccessFile seeker = null;
         try {
-            seeker = new RandomAccessFile(file, "r"); // read only
+            RandomAccessFile seeker = new RandomAccessFile(file, "r"); // read only
             int pageNo = pid.getPageNumber();
             int offset = pageNo * BufferPool.getPageSize();
             seeker.seek(offset);
             byte[] pageBytes = new byte[BufferPool.getPageSize()]; // one page bytes
             seeker.read(pageBytes);
+            seeker.close();
             HeapPageId heapPageId = new HeapPageId(pid.getTableId(), pid.getPageNumber());
             page = new HeapPage(heapPageId, pageBytes);
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
         } catch (IOException e) {
             throw new RuntimeException(e);
-        } finally {
-            try {
-                seeker.close();
-            } catch (IOException e) {
-                throw new RuntimeException("close failed");
-            }
         }
         return page;
     }
@@ -104,6 +98,15 @@ public class HeapFile implements DbFile {
     public void writePage(Page page) throws IOException {
         // some code goes here
         // not necessary for lab1
+        try {
+            RandomAccessFile seeker = new RandomAccessFile(file, "rw"); // read only
+            int pageNo = page.getId().getPageNumber();
+            int offset = pageNo * BufferPool.getPageSize();
+            seeker.seek(offset);
+            seeker.write(page.getPageData());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -124,16 +127,38 @@ public class HeapFile implements DbFile {
     public List<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
-        return null;
         // not necessary for lab1
+        List<Page> result = new ArrayList<>();
+        // 插入时并不知道tuple属于哪个page，所有要先找到一个可用的page
+        HeapPage writtenPage = null;
+        synchronized (this) {
+            HeapPageId heapPageId = new HeapPageId(this.getId(), numPages() - 1);
+            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, heapPageId, Permissions.READ_WRITE);
+            if (page.getNumEmptySlots() == 0) {
+                HeapPageId nPageId = new HeapPageId(this.getId(), numPages());
+                HeapPage heapPage = new HeapPage(nPageId, new byte[BufferPool.getPageSize()]);
+                writtenPage = heapPage;
+            } else {
+                writtenPage = page;
+            }
+            writtenPage.insertTuple(t);
+            this.writePage(writtenPage);
+        }
+        result.add(writtenPage);
+        return result;
     }
 
     // see DbFile.java for javadocs
-    public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
+    public List<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
         // some code goes here
-        return null;
         // not necessary for lab1
+        List<Page> result = new ArrayList<>();
+        PageId pageId = t.getRecordId().getPageId();
+        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_WRITE);
+        page.deleteTuple(t);
+        result.add(page);
+        return result;
     }
 
     // see DbFile.java for javadocs
@@ -179,7 +204,6 @@ public class HeapFile implements DbFile {
                 HeapPageId pageId = new HeapPageId(getId(), pageCursor);
                 HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
                 curItr = page.iterator();
-                ;
             }
             return true;
         }
