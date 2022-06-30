@@ -89,7 +89,7 @@ public class BufferPool {
         if (result == null) {
             synchronized (this) {
                 if (bufferPool.size() == capacity) {
-                    throw new DbException("BufferPool is full");
+                    evictPage();
                 }
                 int tableId = pid.getTableId();
                 DbFile file = Database.getCatalog().getDatabaseFile(tableId);
@@ -205,7 +205,10 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
-
+        for (Map.Entry<PageId, Page> entry : bufferPool.entrySet()) {
+            PageId pageId = entry.getKey();
+            this.flushPage(pageId);
+        }
     }
 
     /**
@@ -220,6 +223,7 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        bufferPool.remove(pid);
     }
 
     /**
@@ -230,6 +234,11 @@ public class BufferPool {
     private synchronized void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        Page page = bufferPool.get(pid);
+        if (page.isDirty() != null) {
+            Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(page);
+            page.markDirty(false, null);
+        }
     }
 
     /**
@@ -247,6 +256,16 @@ public class BufferPool {
     private synchronized void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+        for (Map.Entry<PageId, Page> entry : bufferPool.entrySet()) {
+            PageId pageId = entry.getKey();
+            try {
+                flushPage(pageId);
+                bufferPool.remove(pageId);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            break;
+        }
     }
 
 }

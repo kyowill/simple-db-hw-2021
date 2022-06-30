@@ -8,6 +8,7 @@ import simpledb.transaction.TransactionId;
 
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * HeapFile is an implementation of a DbFile that stores a collection of tuples
@@ -24,7 +25,6 @@ public class HeapFile implements DbFile {
     private File file;
     private TupleDesc tupleDesc;
 
-    private volatile HeapPageId lastPageId;
 
     /**
      * Constructs a heap file backed by the specified file.
@@ -104,6 +104,7 @@ public class HeapFile implements DbFile {
             int offset = pageNo * BufferPool.getPageSize();
             seeker.seek(offset);
             seeker.write(page.getPageData());
+            seeker.close();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -114,6 +115,10 @@ public class HeapFile implements DbFile {
      */
     public int numPages() {
         // some code goes here
+        return calFileSize(file);
+    }
+
+    private int calFileSize(File file) {
         long len = file.length();
         int page = BufferPool.getPageSize();
         int num = (int) (len / page);
@@ -122,6 +127,7 @@ public class HeapFile implements DbFile {
         }
         return num + 1;
     }
+
 
     // see DbFile.java for javadocs
     public List<Page> insertTuple(TransactionId tid, Tuple t)
@@ -136,13 +142,14 @@ public class HeapFile implements DbFile {
             HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, heapPageId, Permissions.READ_WRITE);
             if (page.getNumEmptySlots() == 0) {
                 HeapPageId nPageId = new HeapPageId(this.getId(), numPages());
-                HeapPage heapPage = new HeapPage(nPageId, new byte[BufferPool.getPageSize()]);
+                // HeapPage heapPage = new HeapPage(nPageId, new byte[BufferPool.getPageSize()]);
+                HeapPage heapPage = (HeapPage) Database.getBufferPool().getPage(tid, nPageId, Permissions.READ_WRITE);
+                this.writePage(heapPage); // must flush for right page number
                 writtenPage = heapPage;
             } else {
                 writtenPage = page;
             }
             writtenPage.insertTuple(t);
-            this.writePage(writtenPage);
         }
         result.add(writtenPage);
         return result;
@@ -173,6 +180,8 @@ public class HeapFile implements DbFile {
 
         private int pageCursor;
 
+        private int size;
+
         private Iterator<Tuple> curItr;
 
         private TransactionId tid;
@@ -180,6 +189,7 @@ public class HeapFile implements DbFile {
         public DbFileItr(TransactionId tid) {
             opened = false;
             this.tid = tid;
+            size = numPages();
         }
 
         @Override
@@ -196,10 +206,10 @@ public class HeapFile implements DbFile {
             if (!opened) {
                 return false;
             }
-            if (!curItr.hasNext() && pageCursor == numPages() - 1) {
+            if (!curItr.hasNext() && pageCursor == size - 1) {
                 return false;
             }
-            if (!curItr.hasNext()) {
+            while ((!curItr.hasNext()) && pageCursor < size - 1) {
                 pageCursor++;
                 HeapPageId pageId = new HeapPageId(getId(), pageCursor);
                 HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
