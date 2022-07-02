@@ -10,9 +10,7 @@ import simpledb.transaction.Transaction;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -84,6 +82,8 @@ public class TableStats {
 
     static final int MIN_VALUE = 1;
 
+    private int[] distinctNumberOfFields;
+
     /**
      * Create a new TableStats object, that keeps track of statistics on each
      * column of a table
@@ -107,6 +107,12 @@ public class TableStats {
         this.stringHistogramMap = new HashMap<>();
         DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
         TupleDesc td = dbFile.getTupleDesc();
+        distinctNumberOfFields = new int[td.numFields()];
+
+        Map<Integer, Set<Field>> dataMap = new HashMap<>();
+        for (int i = 0; i < td.numFields(); i++) {
+            dataMap.put(i, new HashSet<>());
+        }
 
         // init histogram map
         Iterator<TupleDesc.TDItem> tdItemIterator = td.iterator();
@@ -135,10 +141,12 @@ public class TableStats {
                         IntHistogram intHistogram = intHistogramMap.get(idx);
                         IntField field = (IntField) fItr.next();
                         intHistogram.addValue(field.getValue());
+                        dataMap.get(idx).add(field);
                     } else {
                         StringHistogram stringHistogram = stringHistogramMap.get(idx);
                         StringField field = (StringField) fItr.next();
                         stringHistogram.addValue(field.getValue());
+                        dataMap.get(idx).add(field);
                     }
                     idx++;
                 }
@@ -147,6 +155,9 @@ public class TableStats {
             iterator.close();
         } catch (DbException | TransactionAbortedException e) {
             throw new RuntimeException(e);
+        }
+        for (int i = 0; i < td.numFields(); i++) {
+            distinctNumberOfFields[i] = dataMap.get(i).size();
         }
     }
 
@@ -224,4 +235,7 @@ public class TableStats {
         return size;
     }
 
+    public int distinctNumberOfField(int field) {
+        return distinctNumberOfFields[field];
+    }
 }
