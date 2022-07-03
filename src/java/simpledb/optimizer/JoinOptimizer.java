@@ -122,7 +122,7 @@ public class JoinOptimizer {
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return card1 * card2 + cost1 + cost2;
+            return cost1 + card1 * cost2 + card1 * card2;
         }
     }
 
@@ -238,7 +238,30 @@ public class JoinOptimizer {
 
         // some code goes here
         //Replace the following
-        return joins;
+        PlanCache bestCache = new PlanCache();
+        for (int i = 1; i <= joins.size(); i++) {
+            Set<Set<LogicalJoinNode>> subsets = enumerateSubsets(joins, i);
+            for (Set<LogicalJoinNode> logicalJoinNodes : subsets) {
+                double bestCostSoFar = Double.MAX_VALUE;
+                int cast = Integer.MAX_VALUE;
+                bestCache.addPlan(logicalJoinNodes, bestCostSoFar, cast, new ArrayList<>(logicalJoinNodes));
+                for (LogicalJoinNode removeNode : logicalJoinNodes) {
+                    CostCard costCard = computeCostAndCardOfSubplan(stats, filterSelectivities, removeNode,
+                            logicalJoinNodes, bestCostSoFar, bestCache);
+                    if (costCard == null) {
+                        continue;
+                    }
+                    bestCostSoFar = Math.min(bestCostSoFar, costCard.cost);
+                    bestCache.addPlan(logicalJoinNodes, costCard.cost, costCard.card, costCard.plan);
+                }
+
+            }
+        }
+        List<LogicalJoinNode> result = bestCache.getOrder(new HashSet<>(joins));
+        if (explain) {
+            printJoins(result, bestCache, stats, filterSelectivities);
+        }
+        return result;
     }
 
     // ===================== Private Methods =================================
