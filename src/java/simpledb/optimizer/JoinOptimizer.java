@@ -173,17 +173,14 @@ public class JoinOptimizer {
         if (joinOp.equals(Predicate.Op.EQUALS)) {
             int distinct1 = tableStats1.distinctNumberOfField(table1.getTupleDesc().fieldNameToIndex(field1PureName));
             int distinct2 = tableStats2.distinctNumberOfField(table2.getTupleDesc().fieldNameToIndex(field2PureName));
-            // card = (card1 * card2) / Math.max(distinct1, distinct2);
-            if (t1pkey && t2pkey) {
-                return Math.min(card1, card2);
-            }
-            if (t1pkey && !t2pkey) {
+            card = (card1 * card2) / Math.max(distinct1, distinct2);
+            if (t1pkey && card > card2) {
                 return card2;
             }
-            if (!t1pkey && t2pkey) {
+            if (!t1pkey && card > card1) {
                 return card1;
             }
-            return Math.max(distinct1, distinct2);
+            return card;
         }
         return (int) (UN_EQ_FREQ * card1 * card2);
     }
