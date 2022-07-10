@@ -137,20 +137,24 @@ public class HeapFile implements DbFile {
         List<Page> result = new ArrayList<>();
         // 插入时并不知道tuple属于哪个page，所有要先找到一个可用的page
         HeapPage writtenPage = null;
-        synchronized (this) {
-            HeapPageId heapPageId = new HeapPageId(this.getId(), numPages() - 1);
-            HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, heapPageId, Permissions.READ_WRITE);
-            if (page.getNumEmptySlots() == 0) {
-                HeapPageId nPageId = new HeapPageId(this.getId(), numPages());
-                // HeapPage heapPage = new HeapPage(nPageId, new byte[BufferPool.getPageSize()]);
-                HeapPage heapPage = (HeapPage) Database.getBufferPool().getPage(tid, nPageId, Permissions.READ_WRITE);
-                this.writePage(heapPage); // must flush for right page number
-                writtenPage = heapPage;
-            } else {
-                writtenPage = page;
+        HeapPageId heapPageId = new HeapPageId(this.getId(), numPages() - 1);
+        HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, heapPageId, Permissions.READ_ONLY);
+        Database.getBufferPool().unsafeReleasePage(tid, heapPageId);
+        if (page.getNumEmptySlots() == 0) {
+            synchronized (this) {
+                if (page.getNumEmptySlots() == 0) {
+                    HeapPageId nPageId = new HeapPageId(this.getId(), numPages());
+                    // HeapPage heapPage = new HeapPage(nPageId, new byte[BufferPool.getPageSize()]);
+                    HeapPage heapPage = (HeapPage) Database.getBufferPool().getPage(tid, nPageId, Permissions.READ_WRITE);
+                    this.writePage(heapPage); // must flush for right page number
+                    writtenPage = heapPage;
+                }
             }
-            writtenPage.insertTuple(t);
+        } else {
+            page = (HeapPage) Database.getBufferPool().getPage(tid, heapPageId, Permissions.READ_WRITE);
+            writtenPage = page;
         }
+        writtenPage.insertTuple(t);
         result.add(writtenPage);
         return result;
     }
@@ -210,6 +214,8 @@ public class HeapFile implements DbFile {
                 return false;
             }
             while ((!curItr.hasNext()) && pageCursor < size - 1) {
+
+                Database.getBufferPool().unsafeReleasePage(tid, new HeapPageId(getId(), pageCursor));
                 pageCursor++;
                 HeapPageId pageId = new HeapPageId(getId(), pageCursor);
                 HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pageId, Permissions.READ_ONLY);
