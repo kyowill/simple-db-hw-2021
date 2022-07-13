@@ -1,6 +1,7 @@
 package simpledb.storage;
 
 import simpledb.common.*;
+import simpledb.transaction.Transaction;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
@@ -88,21 +89,22 @@ public class BufferPool {
             throws TransactionAbortedException, DbException {
         // some code goes here
         lockManager.lock(tid, pid, perm);
-        Page result = bufferPool.get(pid);
-        if (result == null) {
+        if (!bufferPool.containsKey(pid)) {
             synchronized (this) {
+                if (bufferPool.containsKey(pid)) {
+                    return bufferPool.get(pid);
+                }
                 if (bufferPool.size() == capacity) {
-                    evictPage(); // todo
+                    evictPage();
                 }
                 int tableId = pid.getTableId();
                 DbFile file = Database.getCatalog().getDatabaseFile(tableId);
                 Page page = file.readPage(pid);
-                result = page;
                 bufferPool.put(pid, page);
             }
         }
         //
-        return result;
+        return bufferPool.get(pid);
     }
 
     /**
@@ -128,6 +130,7 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid) {
         // some code goes here
         // not necessary for lab1|lab2
+        transactionComplete(tid, true);
     }
 
     /**
@@ -149,6 +152,24 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
         // not necessary for lab1|lab2
+        if (commit) {
+            try {
+                flushPages(tid);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            synchronized (this) {
+                for (Map.Entry<PageId, Page> entry : bufferPool.entrySet()) {
+                    Page page = entry.getValue();
+                    TransactionId dirTid = page.isDirty();
+                    if (dirTid != null && dirTid.equals(tid)) {
+                        page.markDirty(false, null);
+                    }
+                }
+            }
+        }
+        lockManager.releasePage(tid);
     }
 
     /**
@@ -252,6 +273,14 @@ public class BufferPool {
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        for (Map.Entry<PageId, Page> entry : bufferPool.entrySet()) {
+            PageId pid = entry.getKey();
+            Page page = entry.getValue();
+            TransactionId dirTid = page.isDirty();
+            if (dirTid != null && dirTid.equals(tid)) {
+                flushPage(pid);
+            }
+        }
     }
 
     /**
@@ -263,14 +292,16 @@ public class BufferPool {
         // not necessary for lab1
         for (Map.Entry<PageId, Page> entry : bufferPool.entrySet()) {
             PageId pageId = entry.getKey();
-            try {
-                flushPage(pageId);
-                bufferPool.remove(pageId);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+            Page page = entry.getValue();
+            TransactionId tid = page.isDirty();
+            if (tid != null) {
+                continue;
             }
-            break;
+            lockManager.releaseSharedPage(pageId);
+            bufferPool.remove(pageId);
+            return;
         }
+        throw new DbException("all pages is dirty, evict failed");
     }
 
 }

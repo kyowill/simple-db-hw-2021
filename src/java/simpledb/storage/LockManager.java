@@ -9,7 +9,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class LockManager {
-    private ConcurrentHashMap<TransactionId, PageId> transactionOwnedMap;
+    private ConcurrentHashMap<TransactionId, ConcurrentHashMap<PageId, Object>> transactionOwnedMap;
 
     private ConcurrentHashMap<PageId, PageLock> pageLockMap;
 
@@ -75,7 +75,7 @@ public class LockManager {
         if (!transactionOwnedMap.containsKey(tid)) {
             return null;
         }
-        if (!transactionOwnedMap.get(tid).equals(p)) {
+        if (!transactionOwnedMap.get(tid).contains(p)) {
             return null;
         }
         return pageLockMap.get(p).holdLock(tid);
@@ -87,7 +87,7 @@ public class LockManager {
         if (!transactionOwnedMap.containsKey(tid)) {
             return;
         }
-        if (!transactionOwnedMap.get(tid).equals(pid)) {
+        if (!transactionOwnedMap.get(tid).containsKey(pid)) {
             return;
         }
 
@@ -104,17 +104,62 @@ public class LockManager {
                 }
             }
         }
+        if (!transactionOwnedMap.containsKey(tid)) {
+            synchronized (this) {
+                if (!transactionOwnedMap.containsKey(tid)) {
+                    transactionOwnedMap.put(tid, new ConcurrentHashMap<>());
+                }
+            }
+        }
 
         if (permissions.equals(Permissions.READ_ONLY)) {
             pageLockMap.get(pid).lockShared(tid);
         } else {
             pageLockMap.get(pid).lockExclusive(tid);
         }
-        transactionOwnedMap.put(tid, pid);
+        transactionOwnedMap.get(tid).put(pid, new Object());
     }
 
     public void unlock(TransactionId tid, PageId pid) {
         pageLockMap.get(pid).unlock(tid);
-        transactionOwnedMap.remove(tid);
+        transactionOwnedMap.get(tid).remove(pid);
+        if (transactionOwnedMap.get(tid).isEmpty()) {
+            synchronized (this) {
+                if (transactionOwnedMap.get(tid).isEmpty()) {
+                    transactionOwnedMap.remove(tid);
+                }
+            }
+        }
+    }
+
+    public void releaseSharedPage(PageId pid) {
+        pageLockMap.remove(pid);
+    }
+
+    public List<PageId> getDirtyPages(TransactionId tid) {
+        ConcurrentHashMap<PageId, Object> map = transactionOwnedMap.get(tid);
+        List<PageId> result = new ArrayList<>();
+        for (Map.Entry<PageId, Object> entry : map.entrySet()) {
+            PageId pageId = entry.getKey();
+            Permissions permissions = holdsLock(tid, pageId);
+            if (permissions != null && permissions.equals(Permissions.READ_WRITE)) {
+                result.add(pageId);
+            }
+        }
+        return result;
+    }
+
+    public void releasePage(TransactionId tid) {
+        ConcurrentHashMap<PageId, Object> map = transactionOwnedMap.get(tid);
+        for (Map.Entry<PageId, Object> entry : map.entrySet()) {
+            unlock(tid, entry.getKey());
+        }
+    }
+
+    public static void main(String[] args) {
+        ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+        lock.readLock().lock();
+        lock.writeLock().lock();
+        System.out.println("succ");
     }
 }
