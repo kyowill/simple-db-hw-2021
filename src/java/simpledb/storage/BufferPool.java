@@ -42,6 +42,8 @@ public class BufferPool {
 
     ConcurrentHashMap<PageId, Page> bufferPool;
 
+    ConcurrentHashMap<TransactionId, ConcurrentHashMap<Page, Object>> transactionOwnedPages;
+
     private LockManager lockManager;
 
     /**
@@ -53,6 +55,7 @@ public class BufferPool {
         // some code goes here
         capacity = numPages;
         bufferPool = new ConcurrentHashMap<>();
+        transactionOwnedPages = new ConcurrentHashMap<>();
         lockManager = new LockManager();
     }
 
@@ -101,6 +104,10 @@ public class BufferPool {
                 DbFile file = Database.getCatalog().getDatabaseFile(tableId);
                 Page page = file.readPage(pid);
                 bufferPool.put(pid, page);
+                if (!transactionOwnedPages.containsKey(tid)) {
+                    transactionOwnedPages.put(tid, new ConcurrentHashMap<>());
+                }
+                transactionOwnedPages.get(tid).put(page, new Object());
             }
         }
         //
@@ -160,8 +167,8 @@ public class BufferPool {
             }
         } else {
             synchronized (this) {
-                for (Map.Entry<PageId, Page> entry : bufferPool.entrySet()) {
-                    Page page = entry.getValue();
+                for (Map.Entry<Page, Object> entry : transactionOwnedPages.get(tid).entrySet()) {
+                    Page page = entry.getKey();
                     TransactionId dirTid = page.isDirty();
                     if (dirTid != null && dirTid.equals(tid)) {
                         page.markDirty(false, null);
@@ -273,12 +280,11 @@ public class BufferPool {
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
-        for (Map.Entry<PageId, Page> entry : bufferPool.entrySet()) {
-            PageId pid = entry.getKey();
-            Page page = entry.getValue();
+        for (Map.Entry<Page, Object> entry : transactionOwnedPages.get(tid).entrySet()) {
+            Page page = entry.getKey();
             TransactionId dirTid = page.isDirty();
             if (dirTid != null && dirTid.equals(tid)) {
-                flushPage(pid);
+                flushPage(page.getId());
             }
         }
     }

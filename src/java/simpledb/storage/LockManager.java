@@ -5,7 +5,6 @@ import simpledb.transaction.TransactionId;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class LockManager {
@@ -136,30 +135,10 @@ public class LockManager {
         pageLockMap.remove(pid);
     }
 
-    public List<PageId> getDirtyPages(TransactionId tid) {
-        ConcurrentHashMap<PageId, Object> map = transactionOwnedMap.get(tid);
-        List<PageId> result = new ArrayList<>();
-        for (Map.Entry<PageId, Object> entry : map.entrySet()) {
-            PageId pageId = entry.getKey();
-            Permissions permissions = holdsLock(tid, pageId);
-            if (permissions != null && permissions.equals(Permissions.READ_WRITE)) {
-                result.add(pageId);
-            }
-        }
-        return result;
-    }
-
     public void releasePage(TransactionId tid) {
         ConcurrentHashMap<PageId, Object> map = transactionOwnedMap.get(tid);
         for (Map.Entry<PageId, Object> entry : map.entrySet()) {
             unlock(tid, entry.getKey());
         }
-    }
-
-    public static void main(String[] args) {
-        ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-        lock.readLock().lock();
-        lock.writeLock().lock();
-        System.out.println("succ");
     }
 }
