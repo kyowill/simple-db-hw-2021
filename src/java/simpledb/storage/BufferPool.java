@@ -91,7 +91,11 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // some code goes here
-        lockManager.lock(tid, pid, perm);
+        try {
+            lockManager.lock(tid, pid, perm);
+        } catch (InterruptedException e) {
+            throw new DbException("lock failed");
+        }
         if (!bufferPool.containsKey(pid)) {
             synchronized (this) {
                 if (bufferPool.containsKey(pid)) {
