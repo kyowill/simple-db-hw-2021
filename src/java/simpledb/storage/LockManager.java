@@ -1,5 +1,6 @@
 package simpledb.storage;
 
+import simpledb.common.DbException;
 import simpledb.common.Permissions;
 import simpledb.transaction.Transaction;
 import simpledb.transaction.TransactionAbortedException;
@@ -16,6 +17,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class LockManager {
     private ConcurrentHashMap<TransactionId, ConcurrentHashMap<PageId, Object>> transactionOwnedMap;
+
+    private static Integer WAIT_SECONDS = 1;
 
     private ConcurrentHashMap<PageId, PageLock> pageLockMap;
 
@@ -52,13 +55,21 @@ public class LockManager {
             return false;
         }
 
-        public void lockShared(TransactionId tid) throws InterruptedException {
+        public void lockShared(TransactionId tid) throws TransactionAbortedException {
             // case 0 status为0 tid加锁成功, shared-set添加tid
             // case 1 status为1 tid加锁成功, shared-set添加tid
             // case 2 status为2 如果exclusive不是tid阻塞(当阻塞结束后，推出等待，检查状态如果是2，那么自然持有共享锁)，否则成功添加tid
             sync.lock();
             while (shouldWaitForExclusive(tid)) {
-                condition.await(1000, TimeUnit.MICROSECONDS);
+                try {
+                    if (!condition.await(WAIT_SECONDS, TimeUnit.SECONDS)) {
+                        throw new InterruptedException("wait too long");
+                    }
+                } catch (InterruptedException e) {
+                    condition.signalAll();
+                    sync.unlock();
+                    throw new TransactionAbortedException(e);
+                }
             }
 
             if (checkStatus() != 2) {
@@ -69,19 +80,36 @@ public class LockManager {
             // 如果 status == 2 独占锁本身持有共享锁
         }
 
-        public void lockExclusive(TransactionId tid) throws InterruptedException {
+        public void lockExclusive(TransactionId tid) throws TransactionAbortedException {
             // case 0 status 0 tid加锁成功 exclusive设置为tid
             // case 1 status 1 如果可以锁升级则不阻塞，否则阻塞
             // case 2 status 2 如果exclusive是tid则成功 否则阻塞
+
             sync.lock();
             int lockStatus = checkStatus();
             if (lockStatus == 2) {
                 while (shouldWaitForExclusive(tid)) {
-                    condition.await(1000, TimeUnit.MICROSECONDS);
+                    try {
+                        if (!condition.await(WAIT_SECONDS, TimeUnit.SECONDS)) {
+                            throw new InterruptedException("wait too long");
+                        }
+                    } catch (InterruptedException e) {
+                        condition.signalAll();
+                        sync.unlock();
+                        throw new TransactionAbortedException(e);
+                    }
                 }
             } else if (lockStatus == 1) {
                 while (!canUpgrade(tid)) {
-                    condition.await(1000, TimeUnit.MICROSECONDS);
+                    try {
+                        if (!condition.await(WAIT_SECONDS, TimeUnit.SECONDS)) {
+                            throw new InterruptedException("wait too long");
+                        }
+                    } catch (InterruptedException e) {
+                        condition.signalAll(); // notify other waiter
+                        sync.unlock();
+                        throw new TransactionAbortedException(e);
+                    }
                 }
                 sharedSet.clear();
             }
@@ -107,13 +135,26 @@ public class LockManager {
         public void unlock(TransactionId tid) {
             // case 0 status为1 sharedSet删除tid
             // case 1 status为2 exclusive设置null
+            // 处理 dead lock
             sync.lock();
-            if (sharedSet.isEmpty()) {
-                exclusive = null;
-            } else {
-                sharedSet.remove(tid);
+
+            // dead lock abort
+            if (!sharedSet.containsKey(tid) && !tid.equals(exclusive)) {
+                sync.unlock();
+                return;
             }
-            status = 0;
+
+            if (sharedSet.isEmpty()) {
+                // exclusive lock
+                exclusive = null;
+                status = 0;
+            } else {
+                // shared lock
+                sharedSet.remove(tid);
+                if (sharedSet.isEmpty()) {
+                    status = 0;
+                }
+            }
             condition.signalAll();
             sync.unlock();
         }
@@ -158,7 +199,7 @@ public class LockManager {
     }
 
 
-    public void lock(TransactionId tid, PageId pid, Permissions permissions) throws InterruptedException {
+    public void lock(TransactionId tid, PageId pid, Permissions permissions) throws TransactionAbortedException {
         if (!pageLockMap.containsKey(pid)) {
             synchronized (this) {
                 if (!pageLockMap.containsKey(pid)) {
@@ -199,6 +240,10 @@ public class LockManager {
     }
 
     public void releasePage(TransactionId tid) {
+        // 如果是deadlock释放releasePage，tid不会持有任何page
+        if (!transactionOwnedMap.containsKey(tid)) {
+            return;
+        }
         ConcurrentHashMap<PageId, Object> map = transactionOwnedMap.get(tid);
         for (Map.Entry<PageId, Object> entry : map.entrySet()) {
             unlock(tid, entry.getKey());

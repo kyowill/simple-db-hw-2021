@@ -42,7 +42,7 @@ public class BufferPool {
 
     ConcurrentHashMap<PageId, Page> bufferPool;
 
-    ConcurrentHashMap<TransactionId, ConcurrentHashMap<Page, Object>> transactionOwnedPages;
+    ConcurrentHashMap<TransactionId, ConcurrentHashMap<PageId, Object>> transactionOwnedPages;
 
     private LockManager lockManager;
 
@@ -91,11 +91,7 @@ public class BufferPool {
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // some code goes here
-        try {
-            lockManager.lock(tid, pid, perm);
-        } catch (InterruptedException e) {
-            throw new DbException("lock failed");
-        }
+        lockManager.lock(tid, pid, perm);
         if (!bufferPool.containsKey(pid)) {
             synchronized (this) {
                 if (bufferPool.containsKey(pid)) {
@@ -108,13 +104,17 @@ public class BufferPool {
                 DbFile file = Database.getCatalog().getDatabaseFile(tableId);
                 Page page = file.readPage(pid);
                 bufferPool.put(pid, page);
-                if (!transactionOwnedPages.containsKey(tid)) {
-                    transactionOwnedPages.put(tid, new ConcurrentHashMap<>());
-                }
-                transactionOwnedPages.get(tid).put(page, new Object());
             }
         }
         //
+        if (!transactionOwnedPages.containsKey(tid)) {
+            synchronized (this) {
+                if (!transactionOwnedPages.containsKey(tid)) {
+                    transactionOwnedPages.put(tid, new ConcurrentHashMap<>());
+                }
+            }
+        }
+        transactionOwnedPages.get(tid).put(pid, new Object());
         return bufferPool.get(pid);
     }
 
@@ -131,6 +131,7 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1|lab2
         lockManager.unsafeReleasePage(tid, pid);
+        transactionOwnedPages.get(tid).remove(pid);
     }
 
     /**
@@ -170,12 +171,14 @@ public class BufferPool {
                 throw new RuntimeException(e);
             }
         } else {
-            synchronized (this) {
-                for (Map.Entry<Page, Object> entry : transactionOwnedPages.get(tid).entrySet()) {
-                    Page page = entry.getKey();
-                    TransactionId dirTid = page.isDirty();
-                    if (dirTid != null && dirTid.equals(tid)) {
-                        page.markDirty(false, null);
+            if (transactionOwnedPages.containsKey(tid)) {
+                synchronized (this) {
+                    for (Map.Entry<PageId, Object> entry : transactionOwnedPages.get(tid).entrySet()) {
+                        Page page = bufferPool.get(entry.getKey());
+                        TransactionId dirTid = page.isDirty();
+                        if (dirTid != null && dirTid.equals(tid)) {
+                            page.markDirty(false, null);
+                        }
                     }
                 }
             }
@@ -284,8 +287,11 @@ public class BufferPool {
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
-        for (Map.Entry<Page, Object> entry : transactionOwnedPages.get(tid).entrySet()) {
-            Page page = entry.getKey();
+        if (!transactionOwnedPages.containsKey(tid)) {
+            return;
+        }
+        for (Map.Entry<PageId, Object> entry : transactionOwnedPages.get(tid).entrySet()) {
+            Page page = bufferPool.get(entry.getKey());
             TransactionId dirTid = page.isDirty();
             if (dirTid != null && dirTid.equals(tid)) {
                 flushPage(page.getId());

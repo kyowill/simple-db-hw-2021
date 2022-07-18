@@ -31,7 +31,8 @@ import static org.junit.Assert.*;
  */
 public class TransactionTest extends SimpleDbTestBase {
     // Wait up to 10 minutes for the test to complete
-    private static final int TIMEOUT_MILLIS = 10 * 60 * 1000;
+    private static final int TIMEOUT_MILLIS = 10 * 60 * 1000; //10 * 60 * 1000
+
     private void validateTransactions(int threads)
             throws DbException, TransactionAbortedException, IOException {
         // Create a table with a single integer value = 0
@@ -41,7 +42,7 @@ public class TransactionTest extends SimpleDbTestBase {
 
         ModifiableCyclicBarrier latch = new ModifiableCyclicBarrier(threads);
         XactionTester[] list = new XactionTester[threads];
-        for(int i = 0; i < list.length; i++) {
+        for (int i = 0; i < list.length; i++) {
             list[i] = new XactionTester(table.getId(), latch);
             list[i].start();
         }
@@ -107,29 +108,32 @@ public class TransactionTest extends SimpleDbTestBase {
                         Query q1 = new Query(ss1, tr.getId());
                         q1.start();
                         Tuple tup = q1.next();
+                        // System.out.println(tup.toString() + ":" + tup.getRecordId());
                         IntField intf = (IntField) tup.getField(0);
                         int i = intf.getValue();
 
                         // create a Tuple so that Insert can insert this new value
                         // into the table.
                         Tuple t = new Tuple(SystemTestUtil.SINGLE_INT_DESCRIPTOR);
-                        t.setField(0, new IntField(i+1));
+                        t.setField(0, new IntField(i + 1));
 
                         // sleep to get some interesting thread interleavings
                         Thread.sleep(1);
 
                         // race the other threads to finish the transaction: one will win
                         q1.close();
-
+                        // System.out.println(tr.toString() + "ss finish");
                         // delete old values (i.e., just one row) from table
                         Delete delOp = new Delete(tr.getId(), ss2);
 
                         Query q2 = new Query(delOp, tr.getId());
 
+                        // System.out.println(tr.toString() + "delete starting");
                         q2.start();
+                        // System.out.println(tr.toString() + "delete started");
                         q2.next();
                         q2.close();
-
+                        // System.out.println(tr.toString() + "delete finish");
                         // set up a Set with a tuple that is one higher than the old one.
                         Set<Tuple> hs = new HashSet<>();
                         hs.add(t);
@@ -141,22 +145,22 @@ public class TransactionTest extends SimpleDbTestBase {
                         q3.start();
                         q3.next();
                         q3.close();
-
+                        // System.out.println(tr.toString() + "insert finish");
                         tr.commit();
                         break;
                     } catch (TransactionAbortedException te) {
-                        //System.out.println("thread " + tr.getId() + " killed");
+                        System.out.println("thread " + tr.getId() + " killed");
                         // give someone else a chance: abort the transaction
                         tr.transactionComplete(true);
                         latch.stillParticipating();
                     }
                 }
-                //System.out.println("thread " + id + " done");
+                // System.out.println("thread " + id + " done");
             } catch (Exception e) {
                 // Store exception for the master thread to handle
                 exception = e;
             }
-            
+
             try {
                 latch.notParticipating();
             } catch (InterruptedException | BrokenBarrierException e) {
@@ -165,22 +169,22 @@ public class TransactionTest extends SimpleDbTestBase {
             completed = true;
         }
     }
-    
+
     private static class ModifiableCyclicBarrier {
         private CountDownLatch awaitLatch;
         private CyclicBarrier participationLatch;
         private AtomicInteger nextParticipants;
-        
+
         public ModifiableCyclicBarrier(int parties) {
             reset(parties);
         }
-        
+
         private void reset(int parties) {
             nextParticipants = new AtomicInteger(0);
             awaitLatch = new CountDownLatch(parties);
             participationLatch = new CyclicBarrier(parties, new UpdateLatch(this, nextParticipants));
         }
-        
+
         public void await() throws InterruptedException {
             awaitLatch.countDown();
             awaitLatch.await();
@@ -198,7 +202,7 @@ public class TransactionTest extends SimpleDbTestBase {
         private static class UpdateLatch implements Runnable {
             final ModifiableCyclicBarrier latch;
             final AtomicInteger nextParticipants;
-            
+
             public UpdateLatch(ModifiableCyclicBarrier latch, AtomicInteger nextParticipants) {
                 this.latch = latch;
                 this.nextParticipants = nextParticipants;
@@ -210,34 +214,39 @@ public class TransactionTest extends SimpleDbTestBase {
                 if (participants > 0) {
                     latch.reset(participants);
                 }
-            }           
+            }
         }
     }
-    
-    @Test public void testSingleThread()
+
+    @Test
+    public void testSingleThread()
             throws IOException, DbException, TransactionAbortedException {
         validateTransactions(1);
     }
 
-    @Test public void testTwoThreads()
+    @Test
+    public void testTwoThreads()
             throws IOException, DbException, TransactionAbortedException {
         validateTransactions(2);
     }
 
-    @Test public void testFiveThreads()
+    @Test
+    public void testFiveThreads()
             throws IOException, DbException, TransactionAbortedException {
         validateTransactions(5);
     }
-    
-    @Test public void testTenThreads()
-    throws IOException, DbException, TransactionAbortedException {
+
+    @Test
+    public void testTenThreads()
+            throws IOException, DbException, TransactionAbortedException {
         validateTransactions(10);
     }
 
-    @Test public void testAllDirtyFails()
+    @Test
+    public void testAllDirtyFails()
             throws IOException, DbException, TransactionAbortedException {
         // Allocate a file with ~10 pages of data
-        HeapFile f = SystemTestUtil.createRandomHeapFile(2, 512*10, null, null);
+        HeapFile f = SystemTestUtil.createRandomHeapFile(2, 512 * 10, null, null);
         Database.resetBufferPool(1);
 
         // BEGIN TRANSACTION
@@ -251,11 +260,14 @@ public class TransactionTest extends SimpleDbTestBase {
         try {
             AbortEvictionTest.findMagicTuple(f, t);
             fail("Expected scan to run out of available buffer pages");
-        } catch (DbException ignored) {}
+        } catch (DbException ignored) {
+        }
         t.commit();
     }
 
-    /** Make test compatible with older version of ant. */
+    /**
+     * Make test compatible with older version of ant.
+     */
     public static junit.framework.Test suite() {
         return new junit.framework.JUnit4TestAdapter(TransactionTest.class);
     }
