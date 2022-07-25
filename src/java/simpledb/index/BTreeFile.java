@@ -186,33 +186,72 @@ public class BTreeFile implements DbFile {
                                        Field f)
             throws DbException, TransactionAbortedException {
         // some code goes here
-        Page page = this.getPage(tid, dirtypages, pid, perm);
-        if (pid.pgcateg() == BTreePageId.LEAF) {
-            BTreeLeafPage leafPage = (BTreeLeafPage) page;
-            return leafPage;
-        }
-
+        Page current = this.getPage(tid, dirtypages, pid, perm);
         if (f == null) {
-            BTreeEntry entry = findLeftMostChildPageId((BTreeInternalPage) page);
+            if (pid.pgcateg() == BTreePageId.LEAF) {
+                return (BTreeLeafPage) current;
+            }
+            BTreeEntry entry = findLeftMostChildPageId((BTreeInternalPage) current);
             return findLeafPage(tid, dirtypages, entry.getLeftChild(), perm, null);
         }
 
-        BTreeInternalPage internalPage = (BTreeInternalPage) page;
+        BTreeInternalPage internalPage = (BTreeInternalPage) current;
         Iterator<BTreeEntry> iterator = internalPage.iterator();
         BTreeEntry target = null;
-        BTreeEntry last = null;
         while (iterator.hasNext()) {
-            last = iterator.next();
-            if (last.getKey().compare(Op.GREATER_THAN_OR_EQ, f)) {
-                target = last;
+            BTreeEntry entry = iterator.next();
+            target = entry;
+            if (entry.getKey().compare(Op.GREATER_THAN_OR_EQ, f)) {
                 break;
             }
         }
-
-        if (target == null && last != null) {
-            return findLeafPage(tid, dirtypages, last.getRightChild(), perm, f);
+        BTreePageId rightChildId = target.getRightChild();
+        BTreePageId leftChildId = target.getLeftChild();
+        if (target.getKey().compare(Op.LESS_THAN, f)) {
+            if (rightChildId.pgcateg() == BTreePageId.LEAF) {
+                return (BTreeLeafPage) this.getPage(tid, dirtypages, rightChildId, perm);
+            }
+            return findLeafPage(tid, dirtypages, rightChildId, perm, f);
         }
-        return findLeafPage(tid, dirtypages, target.getLeftChild(), perm, f);
+
+        if (target.getKey().compare(Op.EQUALS, f)) {
+            // child leaf
+            if (rightChildId.pgcateg() == BTreePageId.LEAF) {
+                BTreeLeafPage leftChildPage = (BTreeLeafPage) this.getPage(tid, dirtypages, rightChildId, perm);
+                Iterator<Tuple> tupleIterator = leftChildPage.reverseIterator();
+                while (tupleIterator.hasNext()) {
+                    Tuple tuple = tupleIterator.next();
+                    if (tuple.getField(keyField).equals(f)) {
+                        return leftChildPage;
+                    } else if (tuple.getField(keyField).compare(Op.LESS_THAN, f)){
+                        break;
+                    }
+                }
+                BTreeLeafPage rightChildPage = (BTreeLeafPage) this.getPage(tid, dirtypages, rightChildId, perm);
+                Iterator<Tuple> tupleIter = leftChildPage.iterator();
+                while (tupleIter.hasNext()) {
+                    Tuple tuple = tupleIter.next();
+                    if (tuple.getField(keyField).equals(f)) {
+                        return rightChildPage;
+                    } else if (tuple.getField(keyField).compare(Op.GREATER_THAN, f)){
+                        break;
+                    }
+                }
+            }
+
+            // child not leaf
+            return findLeafPage(tid, dirtypages, rightChildId, perm, f);
+        }
+        // greater than
+        if (rightChildId.pgcateg() == BTreePageId.LEAF) {
+            return (BTreeLeafPage) this.getPage(tid, dirtypages, leftChildId, perm);
+        }
+        // child not leaf
+        return findLeafPage(tid, dirtypages, leftChildId, perm, f);
+    }
+
+    private boolean isRootPage(BTreeInternalPage page) {
+        return page.getParentId().getPageNumber() == 0;
     }
 
     private BTreeEntry findLeftMostChildPageId(BTreeInternalPage page) {
