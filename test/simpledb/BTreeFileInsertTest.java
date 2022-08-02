@@ -30,6 +30,7 @@ public class BTreeFileInsertTest extends SimpleDbTestBase {
 
 	@After
 	public void tearDown() {
+		// System.out.printf("after");
 		Database.getBufferPool().transactionComplete(tid);
 		
 		// set the page size back to the default
@@ -68,13 +69,11 @@ public class BTreeFileInsertTest extends SimpleDbTestBase {
 		BTreeLeafPage otherPage;
 		if(page.getLeftSiblingId() != null) {
 			otherPage = (BTreeLeafPage) dirtypages.get(page.getLeftSiblingId());
-			assertTrue(field.compare(Op.GREATER_THAN_OR_EQ, 
-					otherPage.reverseIterator().next().getField(keyField)));
+			assertTrue(field.compare(Op.GREATER_THAN_OR_EQ, otherPage.reverseIterator().next().getField(keyField)));
 		}
 		else { // page.getRightSiblingId() != null
 			otherPage = (BTreeLeafPage) dirtypages.get(page.getRightSiblingId());
-			assertTrue(field.compare(Op.LESS_THAN_OR_EQ, 
-					otherPage.iterator().next().getField(keyField)));
+			assertTrue(field.compare(Op.LESS_THAN_OR_EQ, otherPage.iterator().next().getField(keyField)));
 		}
 		
 		int totalTuples = page.getNumTuples() + otherPage.getNumTuples();

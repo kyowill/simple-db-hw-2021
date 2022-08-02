@@ -187,10 +187,10 @@ public class BTreeFile implements DbFile {
             throws DbException, TransactionAbortedException {
         // some code goes here
         Page current = this.getPage(tid, dirtypages, pid, perm);
+        if (pid.pgcateg() == BTreePageId.LEAF) {
+            return (BTreeLeafPage) current;
+        }
         if (f == null) {
-            if (pid.pgcateg() == BTreePageId.LEAF) {
-                return (BTreeLeafPage) current;
-            }
             BTreeEntry entry = findLeftMostChildPageId((BTreeInternalPage) current);
             return findLeafPage(tid, dirtypages, entry.getLeftChild(), perm, null);
         }
@@ -216,8 +216,8 @@ public class BTreeFile implements DbFile {
 
         if (target.getKey().compare(Op.EQUALS, f)) {
             // child leaf
-            if (rightChildId.pgcateg() == BTreePageId.LEAF) {
-                BTreeLeafPage leftChildPage = (BTreeLeafPage) this.getPage(tid, dirtypages, rightChildId, perm);
+            if (leftChildId.pgcateg() == BTreePageId.LEAF) {
+                BTreeLeafPage leftChildPage = (BTreeLeafPage) this.getPage(tid, dirtypages, leftChildId, perm);
                 Iterator<Tuple> tupleIterator = leftChildPage.reverseIterator();
                 while (tupleIterator.hasNext()) {
                     Tuple tuple = tupleIterator.next();
@@ -228,7 +228,7 @@ public class BTreeFile implements DbFile {
                     }
                 }
                 BTreeLeafPage rightChildPage = (BTreeLeafPage) this.getPage(tid, dirtypages, rightChildId, perm);
-                Iterator<Tuple> tupleIter = leftChildPage.iterator();
+                Iterator<Tuple> tupleIter = rightChildPage.iterator();
                 while (tupleIter.hasNext()) {
                     Tuple tuple = tupleIter.next();
                     if (tuple.getField(keyField).equals(f)) {
@@ -237,6 +237,7 @@ public class BTreeFile implements DbFile {
                         break;
                     }
                 }
+                return leftChildPage;
             }
 
             // child not leaf
@@ -310,8 +311,46 @@ public class BTreeFile implements DbFile {
         // the new entry.  getParentWithEmtpySlots() will be useful here.  Don't forget to update
         // the sibling pointers of all the affected leaf pages.  Return the page into which a 
         // tuple with the given key field should be inserted.
-        return null;
 
+        int size = page.getMaxTuples();
+        int half = size / 2;
+        BTreeLeafPage secPage = (BTreeLeafPage) this.getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+        int step = 0;
+        Iterator<Tuple> oldIter = page.iterator();
+        Tuple splitPoint = null;
+        while (oldIter.hasNext()) {
+            Tuple cur = oldIter.next();
+            if (step >= half) {
+                if (splitPoint == null) {
+                    splitPoint = cur;
+                }
+                page.deleteTuple(cur); // data delete
+                secPage.insertTuple(cur);// data copy
+
+            }
+            step++;
+        }
+
+        BTreeEntry entry = new BTreeEntry(splitPoint.getField(keyField), page.getId(), secPage.getId());
+
+
+        // set link
+        if (page.getRightSiblingId() != null) {
+            BTreeLeafPage nextPage = (BTreeLeafPage) getPage(tid, dirtypages, page.getRightSiblingId(), Permissions.READ_WRITE);
+            nextPage.setLeftSiblingId(secPage.getId());
+            secPage.setRightSiblingId(page.getRightSiblingId());
+        }
+        secPage.setLeftSiblingId(page.getId());
+        page.setRightSiblingId(secPage.getId());
+
+
+        // insert entry into parent
+        BTreeInternalPage parent = this.getParentWithEmptySlots(tid, dirtypages, page.getParentId(), field);
+        parent.insertEntry(entry);
+
+        // set parent
+        secPage.setParentId(parent.getId());
+        return splitPoint.getField(keyField).compare(Op.GREATER_THAN_OR_EQ, field) ? page : secPage;
     }
 
     /**
@@ -347,7 +386,38 @@ public class BTreeFile implements DbFile {
         // the parent pointers of all the children moving to the new page.  updateParentPointers()
         // will be useful here.  Return the page into which an entry with the given key field
         // should be inserted.
-        return null;
+        // insert entry into parent
+
+        int size = page.getMaxEntries();
+        int half = size / 2;
+        BTreeInternalPage secPage = (BTreeInternalPage) this.getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+        int step = 0;
+        Iterator<BTreeEntry> oldIter = page.iterator();
+        BTreeEntry splitPoint = null;
+        while (oldIter.hasNext()) {
+            BTreeEntry cur = oldIter.next();
+            if (step == half) {
+                page.deleteKeyAndRightChild(cur); // delete entry
+                splitPoint = cur;
+            } else if (step > half) {
+                page.deleteKeyAndRightChild(cur); // delete entry
+                secPage.insertEntry(cur); // differ from leaf page split
+            }
+            step++;
+        }
+        // update children parentId
+
+
+        BTreeEntry entry = new BTreeEntry(splitPoint.getKey(), page.getId(), secPage.getId());
+        BTreeInternalPage parent = this.getParentWithEmptySlots(tid, dirtypages, page.getParentId(), field);
+        parent.insertEntry(entry);
+
+
+        // set parent
+        secPage.setParentId(parent.getId());
+        updateParentPointers(tid, dirtypages, secPage);
+
+        return splitPoint.getKey().compare(Op.GREATER_THAN_OR_EQ, field) ? page : secPage;
     }
 
     /**
@@ -506,6 +576,8 @@ public class BTreeFile implements DbFile {
         // and split the leaf page if there are no more slots available
         BTreeLeafPage leafPage = findLeafPage(tid, dirtypages, rootId, Permissions.READ_WRITE, t.getField(keyField));
         if (leafPage.getNumEmptySlots() == 0) {
+            // System.out.println("spliting" + leafPage.pid + t.getField(keyField));
+            // BTreeChecker.checkRep(this, tid, new HashMap<>(), true);
             leafPage = splitLeafPage(tid, dirtypages, leafPage, t.getField(keyField));
         }
 

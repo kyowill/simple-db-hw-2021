@@ -96,9 +96,14 @@ public class BTreeFileInsertTest extends SimpleDbTestBase {
 		for (int i = 0; i < 5; ++i) {
 			for(int j = 0; j < 600; ++j) {
 				tup = BTreeUtility.getBTreeTuple(i, 2);
-				empty.insertTuple(tid, tup);
+				// System.out.println(i + ":" + j);
+				if (i == 1 && j == 502) {
+					empty.insertTuple(tid, tup);
+				} else {
+					empty.insertTuple(tid, tup);
+				}
+				BTreeChecker.checkRep(empty, tid, new HashMap<>(), true);
 			}
-
 		}
 
 		BTreeChecker.checkRep(empty, tid, new HashMap<>(), true);
@@ -251,7 +256,12 @@ public class BTreeFileInsertTest extends SimpleDbTestBase {
 		for(int i = 0; i < 100; i++) {
 			int item = rand.nextInt(BTreeUtility.MAX_RAND_VALUE);
 			Tuple t = BTreeUtility.getBTreeTuple(item, 2);
+			BTreeChecker.checkRep(bigFile, tid, new HashMap<>(), false);
+			//System.out.println("success");
 			Database.getBufferPool().insertTuple(tid, bigFile.getId(), t);
+			//BTreeChecker.checkRep(bigFile, tid, new HashMap<>(), true);
+
+
 
 			IndexPredicate ipred = new IndexPredicate(Op.EQUALS, t.getField(0));
 			DbFileIterator fit = bigFile.indexIterator(tid, ipred);

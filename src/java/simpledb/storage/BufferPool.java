@@ -1,13 +1,12 @@
 package simpledb.storage;
 
 import simpledb.common.*;
-import simpledb.transaction.Transaction;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
 import java.io.*;
 
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,6 +41,7 @@ public class BufferPool {
 
     ConcurrentHashMap<PageId, Page> bufferPool;
 
+    // 与bufferpool数据可能不一致，evict时只是不清除dirtyPage，有共享锁的page可以被清除
     ConcurrentHashMap<TransactionId, ConcurrentHashMap<PageId, Object>> transactionOwnedPages;
 
     private LockManager lockManager;
@@ -132,6 +132,9 @@ public class BufferPool {
         // not necessary for lab1|lab2
         lockManager.unsafeReleasePage(tid, pid);
         transactionOwnedPages.get(tid).remove(pid);
+        if (transactionOwnedPages.get(tid).isEmpty()) {
+            transactionOwnedPages.remove(tid);
+        }
     }
 
     /**
@@ -174,6 +177,10 @@ public class BufferPool {
             if (transactionOwnedPages.containsKey(tid)) {
                 synchronized (this) {
                     for (Map.Entry<PageId, Object> entry : transactionOwnedPages.get(tid).entrySet()) {
+                        PageId pid = entry.getKey();
+                        if (!bufferPool.containsKey(pid)) {
+                            continue;
+                        }
                         Page page = bufferPool.get(entry.getKey());
                         TransactionId dirTid = page.isDirty();
                         if (dirTid != null && dirTid.equals(tid)) {
@@ -181,6 +188,7 @@ public class BufferPool {
                         }
                     }
                 }
+                transactionOwnedPages.remove(tid);
             }
         }
         lockManager.releasePage(tid);
@@ -208,7 +216,6 @@ public class BufferPool {
         List<Page> pageList = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid, t);
         for (Page page : pageList) {
             page.markDirty(true, tid);
-            bufferPool.put(page.getId(), page);
         }
     }
 
@@ -233,7 +240,6 @@ public class BufferPool {
         List<Page> pageList = Database.getCatalog().getDatabaseFile(tableId).deleteTuple(tid, t);
         for (Page page : pageList) {
             page.markDirty(true, tid);
-            bufferPool.put(page.getId(), page);
         }
     }
 
@@ -247,7 +253,7 @@ public class BufferPool {
         // not necessary for lab1
         for (Map.Entry<PageId, Page> entry : bufferPool.entrySet()) {
             PageId pageId = entry.getKey();
-            this.flushPage(pageId);
+            flushPage(pageId);
         }
     }
 
@@ -291,12 +297,16 @@ public class BufferPool {
             return;
         }
         for (Map.Entry<PageId, Object> entry : transactionOwnedPages.get(tid).entrySet()) {
-            Page page = bufferPool.get(entry.getKey());
-            TransactionId dirTid = page.isDirty();
-            if (dirTid != null && dirTid.equals(tid)) {
-                flushPage(page.getId());
+            PageId pid = entry.getKey();
+            if (bufferPool.containsKey(pid)) {
+                Page page = bufferPool.get(pid);
+                TransactionId dirTid = page.isDirty();
+                if (dirTid != null && dirTid.equals(tid)) {
+                    flushPage(page.getId());
+                }
             }
         }
+        transactionOwnedPages.remove(tid);
     }
 
     /**
@@ -313,7 +323,7 @@ public class BufferPool {
             if (tid != null) {
                 continue;
             }
-            lockManager.releaseSharedPage(pageId);
+            // lockManager.releaseSharedPage(pageId);
             bufferPool.remove(pageId);
             return;
         }

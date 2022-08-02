@@ -143,7 +143,6 @@ public class BTreeFileReadTest extends SimpleDbTestBase {
 		BTreeFile twoLeafPageFile = BTreeUtility.createBTreeFile(2, 520,
 				null, null, 0);
 		Field f =  new IntField(5);
-
 		// greater than
 		IndexPredicate ipred = new IndexPredicate(Op.GREATER_THAN, f);
 		DbFileIterator it = twoLeafPageFile.indexIterator(tid, ipred);
