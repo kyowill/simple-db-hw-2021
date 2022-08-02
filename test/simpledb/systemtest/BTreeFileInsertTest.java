@@ -96,16 +96,9 @@ public class BTreeFileInsertTest extends SimpleDbTestBase {
 		for (int i = 0; i < 5; ++i) {
 			for(int j = 0; j < 600; ++j) {
 				tup = BTreeUtility.getBTreeTuple(i, 2);
-				// System.out.println(i + ":" + j);
-				if (i == 1 && j == 502) {
-					empty.insertTuple(tid, tup);
-				} else {
-					empty.insertTuple(tid, tup);
-				}
-				BTreeChecker.checkRep(empty, tid, new HashMap<>(), true);
+				empty.insertTuple(tid, tup);
 			}
 		}
-
 		BTreeChecker.checkRep(empty, tid, new HashMap<>(), true);
 
 		// now search for some ranges and make sure we find all the tuples
