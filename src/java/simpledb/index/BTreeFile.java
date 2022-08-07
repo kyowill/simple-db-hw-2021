@@ -223,7 +223,7 @@ public class BTreeFile implements DbFile {
                     Tuple tuple = tupleIterator.next();
                     if (tuple.getField(keyField).equals(f)) {
                         return leftChildPage;
-                    } else if (tuple.getField(keyField).compare(Op.LESS_THAN, f)){
+                    } else if (tuple.getField(keyField).compare(Op.LESS_THAN, f)) {
                         break;
                     }
                 }
@@ -233,7 +233,7 @@ public class BTreeFile implements DbFile {
                     Tuple tuple = tupleIter.next();
                     if (tuple.getField(keyField).equals(f)) {
                         return rightChildPage;
-                    } else if (tuple.getField(keyField).compare(Op.GREATER_THAN, f)){
+                    } else if (tuple.getField(keyField).compare(Op.GREATER_THAN, f)) {
                         break;
                     }
                 }
@@ -807,6 +807,39 @@ public class BTreeFile implements DbFile {
         // that the entries are evenly distributed. Be sure to update
         // the corresponding parent entry. Be sure to update the parent
         // pointers of all children in the entries that were moved.
+        int lessSize = page.getNumEmptySlots();
+        int moreSize = leftSibling.getNumEmptySlots();
+        int avg = (lessSize + moreSize) / 2;
+        int stealNum = lessSize - avg;
+        Iterator<BTreeEntry> iter = leftSibling.reverseIterator();
+        int count = 0;
+
+        // insert parent entry
+        if (count < stealNum) {
+            parent.deleteKeyAndRightChild(parentEntry);
+            page.insertEntry(parentEntry);
+            count++;
+        }
+
+        while (iter.hasNext()) {
+            if (count < stealNum - 1) {
+                BTreeEntry cur = iter.next();
+                leftSibling.deleteKeyAndRightChild(cur);
+                page.insertEntry(cur);
+            } else {
+                break;
+            }
+            count++;
+        }
+        // move to parent
+        if (iter.hasNext()) {
+            BTreeEntry cur = iter.next();
+            leftSibling.deleteKeyAndRightChild(cur);
+            cur.setLeftChild(page.getId());
+            cur.setRightChild(leftSibling.getId());
+            parent.insertEntry(cur);
+            updateParentPointers(tid, dirtypages, page);
+        }
     }
 
     /**
