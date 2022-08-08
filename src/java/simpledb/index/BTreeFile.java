@@ -811,36 +811,45 @@ public class BTreeFile implements DbFile {
         int moreSize = leftSibling.getNumEmptySlots();
         int avg = (lessSize + moreSize) / 2;
         int stealNum = lessSize - avg;
-        Iterator<BTreeEntry> iter = leftSibling.reverseIterator();
+        Iterator<BTreeEntry> leftIter = leftSibling.reverseIterator();
+        Iterator<BTreeEntry> iter = page.iterator();
         int count = 0;
+        BTreeEntry lastInsert = null;
 
         // insert parent entry
-        if (count < stealNum) {
-            parent.deleteKeyAndRightChild(parentEntry);
-            page.insertEntry(parentEntry);
-            count++;
+        parent.deleteKeyAndRightChild(parentEntry);
+        if (iter.hasNext() && leftIter.hasNext()) {
+            BTreeEntry lastLeft = leftIter.next();
+            BTreeEntry right = iter.next();
+            parentEntry.setLeftChild(lastLeft.getRightChild());
+            parentEntry.setRightChild(right.getLeftChild());
         }
+        page.insertEntry(parentEntry);
+        lastInsert = parentEntry;
 
-        while (iter.hasNext()) {
+        while (leftIter.hasNext()) {
             if (count < stealNum - 1) {
-                BTreeEntry cur = iter.next();
+                BTreeEntry cur = leftIter.next();
                 leftSibling.deleteKeyAndRightChild(cur);
+                cur.setRightChild(lastInsert.getLeftChild());
                 page.insertEntry(cur);
+                lastInsert = cur;
             } else {
                 break;
             }
             count++;
         }
+
         // move to parent
-        if (iter.hasNext()) {
-            BTreeEntry cur = iter.next();
-            leftSibling.deleteKeyAndRightChild(cur);
-            cur.setLeftChild(page.getId());
-            cur.setRightChild(leftSibling.getId());
-            parent.insertEntry(cur);
-            updateParentPointers(tid, dirtypages, page);
-        }
+        BTreeEntry cur = leftIter.next();
+        leftSibling.deleteKeyAndRightChild(cur);
+        cur.setLeftChild(page.getId());
+        cur.setRightChild(leftSibling.getId());
+        parent.insertEntry(cur);
+        updateParentPointers(tid, dirtypages, page);
+
     }
+
 
     /**
      * Steal entries from the right sibling and copy them to the given page so that both pages are at least
