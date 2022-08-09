@@ -875,6 +875,49 @@ public class BTreeFile implements DbFile {
         // that the entries are evenly distributed. Be sure to update
         // the corresponding parent entry. Be sure to update the parent
         // pointers of all children in the entries that were moved.
+        int lessSize = page.getNumEmptySlots();
+        int moreSize = rightSibling.getNumEmptySlots();
+        int avg = (lessSize + moreSize) / 2;
+        int stealNum = lessSize - avg;
+        Iterator<BTreeEntry> rightIter = rightSibling.iterator();
+        Iterator<BTreeEntry> iter = page.reverseIterator();
+        int count = 0;
+        BTreeEntry lastInsert = null;
+
+        // insert parent entry
+        parent.deleteKeyAndRightChild(parentEntry);
+        if (iter.hasNext() && rightIter.hasNext()) {
+            BTreeEntry lastLeft = iter.next();
+            BTreeEntry right = rightIter.next();
+            parentEntry.setLeftChild(lastLeft.getRightChild());
+            parentEntry.setRightChild(right.getLeftChild());
+        }
+        page.insertEntry(parentEntry);
+        lastInsert = parentEntry;
+
+        while (rightIter.hasNext()) {
+            if (count < stealNum - 1) {
+                BTreeEntry cur = rightIter.next();
+                rightSibling.deleteKeyAndRightChild(cur);
+                cur.setLeftChild(lastInsert.getRightChild());
+                page.insertEntry(cur);
+                lastInsert = cur;
+            } else {
+                break;
+            }
+            count++;
+        }
+
+        // move to parent
+        BTreeEntry cur = rightIter.next();
+        rightSibling.deleteKeyAndRightChild(cur);
+        cur.setLeftChild(page.getId());
+        cur.setRightChild(rightSibling.getId());
+        parent.insertEntry(cur);
+        updateParentPointers(tid, dirtypages, page);
+
+        //System.out.println(page.reverseIterator().next().getKey());
+        //System.out.println(rightSibling.iterator().next().getKey());
     }
 
     /**
