@@ -827,6 +827,7 @@ public class BTreeFile implements DbFile {
         page.insertEntry(parentEntry);
         lastInsert = parentEntry;
 
+        leftIter = leftSibling.reverseIterator();
         while (leftIter.hasNext()) {
             if (count < stealNum - 1) {
                 BTreeEntry cur = leftIter.next();
@@ -895,6 +896,7 @@ public class BTreeFile implements DbFile {
         page.insertEntry(parentEntry);
         lastInsert = parentEntry;
 
+        rightIter = rightSibling.iterator();
         while (rightIter.hasNext()) {
             if (count < stealNum - 1) {
                 BTreeEntry cur = rightIter.next();
@@ -916,8 +918,6 @@ public class BTreeFile implements DbFile {
         parent.insertEntry(cur);
         updateParentPointers(tid, dirtypages, page);
 
-        //System.out.println(page.reverseIterator().next().getKey());
-        //System.out.println(rightSibling.iterator().next().getKey());
     }
 
     /**
