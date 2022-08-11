@@ -947,6 +947,15 @@ public class BTreeFile implements DbFile {
         // the sibling pointers, and make the right page available for reuse.
         // Delete the entry in the parent corresponding to the two pages that are merging -
         // deleteParentEntry() will be useful here
+        Iterator<Tuple> rightIter = rightPage.iterator();
+        while (rightIter.hasNext()) {
+            Tuple cur = rightIter.next();
+            rightPage.deleteTuple(cur);
+            leftPage.insertTuple(cur);
+        }
+        setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
+        leftPage.setRightSiblingId(null);
+        deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
     }
 
     /**
@@ -979,6 +988,7 @@ public class BTreeFile implements DbFile {
         // and make the right page available for reuse
         // Delete the entry in the parent corresponding to the two pages that are merging -
         // deleteParentEntry() will be useful here
+        System.out.println("merge");
     }
 
     /**
