@@ -891,7 +891,7 @@ public class BTreeFile implements DbFile {
         Iterator<BTreeEntry> rightIter = rightSibling.iterator();
         while (rightIter.hasNext() && count < stealNum - 1) {
             BTreeEntry cur = rightIter.next();
-            rightSibling.deleteKeyAndLeftChild(cur);
+            rightSibling.deleteKeyAndRightChild(cur);
             BTreeEntry inserted = new BTreeEntry(cur.getKey(), lastInsert.getRightChild(), cur.getRightChild());
             page.insertEntry(inserted);
             lastInsert = inserted;
@@ -900,7 +900,7 @@ public class BTreeFile implements DbFile {
 
         // move up to parent
         BTreeEntry cur = findFirstEntry(rightSibling);
-        rightSibling.deleteKeyAndRightChild(cur);
+        rightSibling.deleteKeyAndLeftChild(cur);
         parentEntry.setKey(cur.getKey());
         parent.updateEntry(parentEntry);
         updateParentPointers(tid, dirtypages, page);
