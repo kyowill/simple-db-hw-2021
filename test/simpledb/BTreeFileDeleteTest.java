@@ -285,8 +285,13 @@ public class BTreeFileDeleteTest extends SimpleDbTestBase {
 		dirtypages.put(pageId, page);
 		dirtypages.put(siblingId, sibling);
 		dirtypages.put(parentId, parent);
+
+		String lastLeft = page.reverseIterator().next().getKey().toString();
+		String firstRight = sibling.iterator().next().getKey().toString();
+		System.out.println(lastLeft + "==" + firstRight);
 		empty.stealFromRightInternalPage(tid, dirtypages, page, sibling, parent, entry);
-		
+
+
 		// are all the entries still there?
 		assertEquals(totalEntries, page.getNumEntries() + sibling.getNumEntries());
 		
@@ -297,11 +302,13 @@ public class BTreeFileDeleteTest extends SimpleDbTestBase {
 		// are the keys in the left page less than the keys in the right page?
 		assertTrue(page.reverseIterator().next().getKey().compare(Op.LESS_THAN_OR_EQ, 
 				sibling.iterator().next().getKey()));
-		
+		String alastLeft = page.reverseIterator().next().getKey().toString();
+		String afirstRight = sibling.iterator().next().getKey().toString();
+		System.out.println(alastLeft + "==" + afirstRight);
 		// is the parent key reasonable?
 		assertTrue(parent.iterator().next().getKey().compare(Op.LESS_THAN_OR_EQ, sibling.iterator().next().getKey()));
 		assertTrue(parent.iterator().next().getKey().compare(Op.GREATER_THAN_OR_EQ, page.reverseIterator().next().getKey()));
-		
+
 		// are all the parent pointers set?
 		Iterator<BTreeEntry> it = page.reverseIterator();
 		BTreeEntry e = null;
@@ -310,6 +317,7 @@ public class BTreeFileDeleteTest extends SimpleDbTestBase {
 			assertTrue(it.hasNext());
 			e = it.next();
 			BTreePage p = (BTreePage) dirtypages.get(e.getRightChild());
+			// System.out.println(e.getKey() + ":" + p.getParentId());
 			assertEquals(pageId, p.getParentId());
 			++count;
 		}
