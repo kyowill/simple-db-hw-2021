@@ -838,7 +838,7 @@ public class BTreeFile implements DbFile {
 
         // move to parent
         BTreeEntry cur = findLastEntry(leftSibling);
-        leftSibling.deleteKeyAndLeftChild(cur);
+        leftSibling.deleteKeyAndRightChild(cur);
         parentEntry.setKey(cur.getKey());
         parent.updateEntry(parentEntry);
         updateParentPointers(tid, dirtypages, page);
