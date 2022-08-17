@@ -817,19 +817,33 @@ public class BTreeFile implements DbFile {
         int avg = (lessSize + moreSize) / 2;
         int stealNum = lessSize - avg;
         int count = 0;
-        BTreeEntry lastInsert = null;
 
         // insert parent entry
         BTreeEntry lastLeft = findLastEntry(leftSibling);
         BTreeEntry firstRight = findFirstEntry(page);
-        BTreeEntry entry = new BTreeEntry(parentEntry.getKey(), lastLeft.getRightChild(), firstRight.getLeftChild());
-        page.insertEntry(entry);
-        lastInsert = entry;
+        BTreeEntry lastInsert = new BTreeEntry(parentEntry.getKey(), lastLeft.getRightChild(), firstRight.getLeftChild());
+        page.insertEntry(lastInsert);
 
         Iterator<BTreeEntry> leftIter = leftSibling.reverseIterator();
         while (leftIter.hasNext() && count < stealNum - 1) {
             BTreeEntry cur = leftIter.next();
-            BTreeEntry inserted = new BTreeEntry(cur.getKey(), cur.getLeftChild(), lastInsert.getLeftChild());
+            assert cur.getKey().compare(Op.LESS_THAN_OR_EQ, lastInsert.getKey());
+            // BTreeEntry firstEntry = findFirstEntry(page);
+            // BTreeEntry inserted = new BTreeEntry(cur.getKey(), cur.getLeftChild(), firstEntry.getLeftChild());
+            BTreePageId leftChildPageId = cur.getLeftChild();
+            BTreePageId rightChildPageId = lastInsert.getLeftChild();
+            BTreeEntry inserted = new BTreeEntry(cur.getKey(), leftChildPageId, rightChildPageId);
+            BTreePage leftChildPage = (BTreePage) getPage(tid, dirtypages, leftChildPageId, Permissions.READ_ONLY);
+            BTreePage rightChildPage = (BTreePage) getPage(tid, dirtypages, rightChildPageId, Permissions.READ_ONLY);
+            assert findFirstEntry(page).getLeftChild().equals(rightChildPageId);
+            if (leftChildPageId.pgcateg() == BTreePageId.LEAF && rightChildPageId.pgcateg() == BTreePageId.LEAF) {
+                assert findLastTuple((BTreeLeafPage) leftChildPage).getField(keyField).compare(Op.LESS_THAN_OR_EQ, findFirstTuple((BTreeLeafPage) rightChildPage).getField(keyField));
+            } else if (leftChildPageId.pgcateg() == BTreePageId.INTERNAL && rightChildPageId.pgcateg() == BTreePageId.INTERNAL) {
+                assert findLastEntry((BTreeInternalPage) leftChildPage).getKey().compare(Op.LESS_THAN_OR_EQ, findFirstEntry((BTreeInternalPage) rightChildPage).getKey());
+            } else {
+                assert false;
+            }
+
             leftSibling.deleteKeyAndRightChild(cur);
             page.insertEntry(inserted);
             lastInsert = inserted;
@@ -837,7 +851,10 @@ public class BTreeFile implements DbFile {
         }
 
         // move to parent
-        BTreeEntry cur = findLastEntry(leftSibling);
+        BTreeEntry cur = leftIter.next();
+        System.out.println(cur.getKey().toString());
+        System.out.println(findLastEntry(leftSibling).toString());
+        assert cur.getKey().toString().equals(findLastEntry(leftSibling).getKey().toString());
         leftSibling.deleteKeyAndRightChild(cur);
         parentEntry.setKey(cur.getKey());
         parent.updateEntry(parentEntry);
@@ -882,8 +899,6 @@ public class BTreeFile implements DbFile {
         BTreeEntry lastLeft = findLastEntry(page);
         BTreeEntry firstRight = findFirstEntry(rightSibling);
         BTreeEntry entry = new BTreeEntry(parentEntry.getKey(), lastLeft.getRightChild(), firstRight.getLeftChild());
-        BTreePage childPage = (BTreePage) getPage(tid, dirtypages, firstRight.getLeftChild(), Permissions.READ_WRITE);
-        childPage.setParentId(page.getId());
         page.insertEntry(entry);
 
         lastInsert = entry;
@@ -913,9 +928,21 @@ public class BTreeFile implements DbFile {
         return cur;
     }
 
+    private Tuple findFirstTuple(BTreeLeafPage page) {
+        Iterator<Tuple> iterator = page.iterator();
+        Tuple cur = iterator.next();
+        return cur;
+    }
+
     private BTreeEntry findLastEntry(BTreeInternalPage page) {
         Iterator<BTreeEntry> iterator = page.reverseIterator();
         BTreeEntry cur = iterator.next();
+        return cur;
+    }
+
+    private Tuple findLastTuple(BTreeLeafPage page) {
+        Iterator<Tuple> iterator = page.reverseIterator();
+        Tuple cur = iterator.next();
         return cur;
     }
 

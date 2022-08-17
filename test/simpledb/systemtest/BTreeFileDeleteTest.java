@@ -232,7 +232,6 @@ public class BTreeFileDeleteTest extends SimpleDbTestBase {
                     it.next().getLeftChild(), Permissions.READ_ONLY);
             Tuple t = leaf.iterator().next();
             Database.getBufferPool().deleteTuple(tid, t);
-            // BTreeChecker.checkRep(bf, tid, new HashMap<>(), true);
             it = rightChild.iterator();
             count++;
         }
