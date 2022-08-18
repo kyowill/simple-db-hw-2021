@@ -352,6 +352,10 @@ public class BTreeFile implements DbFile {
 
         // set parent
         secPage.setParentId(parent.getId());
+
+        dirtypages.put(page.getId(), page);
+        dirtypages.put(secPage.getId(), secPage);
+        dirtypages.put(parent.getId(), parent);
         return splitPoint.getField(keyField).compare(Op.GREATER_THAN_OR_EQ, field) ? page : secPage;
     }
 
@@ -419,6 +423,10 @@ public class BTreeFile implements DbFile {
         // set parent
         secPage.setParentId(parent.getId());
         updateParentPointers(tid, dirtypages, secPage);
+
+        dirtypages.put(page.getId(), page);
+        dirtypages.put(secPage.getId(), secPage);
+        dirtypages.put(parent.getId(), parent);
 
         return splitPoint.getKey().compare(Op.GREATER_THAN_OR_EQ, field) ? page : secPage;
     }
@@ -845,6 +853,9 @@ public class BTreeFile implements DbFile {
         updateParentPointers(tid, dirtypages, page);
         updateParentPointers(tid, dirtypages, leftSibling);
 
+        dirtypages.put(page.getId(), page);
+        dirtypages.put(leftSibling.getId(), leftSibling);
+        dirtypages.put(parent.getId(), parent);
     }
 
 
@@ -905,6 +916,9 @@ public class BTreeFile implements DbFile {
         parent.updateEntry(parentEntry);
         updateParentPointers(tid, dirtypages, page);
         updateParentPointers(tid, dirtypages, rightSibling);
+        dirtypages.put(page.getId(), page);
+        dirtypages.put(rightSibling.getId(), rightSibling);
+        dirtypages.put(parent.getId(), parent);
     }
 
     private BTreeEntry findFirstEntry(BTreeInternalPage page) {
@@ -913,11 +927,6 @@ public class BTreeFile implements DbFile {
         return cur;
     }
 
-    private Tuple findFirstTuple(BTreeLeafPage page) {
-        Iterator<Tuple> iterator = page.iterator();
-        Tuple cur = iterator.next();
-        return cur;
-    }
 
     private BTreeEntry findLastEntry(BTreeInternalPage page) {
         Iterator<BTreeEntry> iterator = page.reverseIterator();
@@ -925,11 +934,6 @@ public class BTreeFile implements DbFile {
         return cur;
     }
 
-    private Tuple findLastTuple(BTreeLeafPage page) {
-        Iterator<Tuple> iterator = page.reverseIterator();
-        Tuple cur = iterator.next();
-        return cur;
-    }
 
     /**
      * Merge two leaf pages by moving all tuples from the right page to the left page.
@@ -985,6 +989,9 @@ public class BTreeFile implements DbFile {
         deleteParentEntry(tid, dirtypages, leftPage, parent, parentEntry);
 
         setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
+        dirtypages.put(leftPage.getId(), leftPage);
+        dirtypages.put(rightPage.getId(), rightPage);
+        dirtypages.put(parent.getId(), parent);
     }
 
     /**
@@ -1034,6 +1041,10 @@ public class BTreeFile implements DbFile {
         }
         setEmptyPage(tid, dirtypages, rightPage.getId().getPageNumber());
         updateParentPointers(tid, dirtypages, leftPage);
+        updateParentPointers(tid, dirtypages, rightPage);
+        dirtypages.put(leftPage.getId(), leftPage);
+        dirtypages.put(rightPage.getId(), rightPage);
+        dirtypages.put(parent.getId(), parent);
     }
 
     /**
