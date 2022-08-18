@@ -216,6 +216,7 @@ public class BufferPool {
         List<Page> pageList = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid, t);
         for (Page page : pageList) {
             page.markDirty(true, tid);
+            bufferPool.put(page.getId(), page);
         }
     }
 
@@ -240,6 +241,7 @@ public class BufferPool {
         List<Page> pageList = Database.getCatalog().getDatabaseFile(tableId).deleteTuple(tid, t);
         for (Page page : pageList) {
             page.markDirty(true, tid);
+            bufferPool.put(page.getId(), page);
         }
     }
 
