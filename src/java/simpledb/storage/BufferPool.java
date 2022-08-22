@@ -215,8 +215,14 @@ public class BufferPool {
         // not necessary for lab1
         List<Page> pageList = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid, t);
         for (Page page : pageList) {
+            PageId pid = page.getId();
             page.markDirty(true, tid);
-            bufferPool.put(page.getId(), page);
+            synchronized (this) {
+                if (bufferPool.size() == capacity) {
+                    evictPage();
+                }
+                bufferPool.put(pid, page); // bufferpool里原来的page可能被删掉
+            }
         }
     }
 
@@ -241,7 +247,13 @@ public class BufferPool {
         List<Page> pageList = Database.getCatalog().getDatabaseFile(tableId).deleteTuple(tid, t);
         for (Page page : pageList) {
             page.markDirty(true, tid);
-            bufferPool.put(page.getId(), page);
+            PageId pid = page.getId();
+            synchronized (this) {
+                if (bufferPool.size() == capacity) {
+                    evictPage();
+                }
+                bufferPool.put(pid, page); // bufferpool里原来的page可能被删掉
+            }
         }
     }
 
